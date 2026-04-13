@@ -7,7 +7,7 @@
 export CUDA_VISIBLE_DEVICES=0
 
 # 进入工作目录
-cd /home/wh/fj/RT-DETR/rtdetrv2_pytorch
+cd /home/fj/RT-DETR/rtdetrv2_pytorch
 
 # 创建输出目录
 mkdir -p output/rtdetrv2_dinov3b_visdrone
@@ -35,8 +35,8 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # 检查数据集路径
-if [ ! -d "/home/wh/fj/Datasets/visdrone" ]; then
-    echo "Error: Dataset not found at /home/wh/fj/Datasets/visdrone"
+if [ ! -d "/home/fj/datasets/visdrone" ]; then
+    echo "Error: Dataset not found at /home/fj/datasets/visdrone"
     exit 1
 fi
 
