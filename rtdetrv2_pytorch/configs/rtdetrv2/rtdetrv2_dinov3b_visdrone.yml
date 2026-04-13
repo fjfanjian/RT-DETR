@@ -19,7 +19,7 @@ RTDETR:
 
 DINOv3Backbone:
   model_name: dinov3_vitb16
-  pretrained_path: /home/wh/fj/dinov3/weights/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth
+  pretrained_path: /home/fj/dinov3/weights/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth
   layers_to_use: 4
   freeze_backbone: True
   hidden_dim: 256
