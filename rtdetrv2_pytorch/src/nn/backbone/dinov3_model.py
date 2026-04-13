@@ -34,7 +34,13 @@ class DINOv3Model(nn.Module):
         self.layers_to_use = layers_to_use
 
         # 加载 DINOv3 模型
-        if name == "dinov3_vitb16":
+        if pretrained_path:
+            # 从本地路径加载权重
+            self.backbone = dinov3_backbones.dinov3_vitb16(pretrained=False)
+            state_dict = torch.load(pretrained_path, map_location='cpu')
+            self.backbone.load_state_dict(state_dict, strict=False)
+            print(f'Loaded DINOv3 weights from: {pretrained_path}')
+        elif name == "dinov3_vitb16":
             self.backbone = dinov3_backbones.dinov3_vitb16(pretrained=True)
         elif name == "dinov3_vitl16":
             self.backbone = dinov3_backbones.dinov3_vitl16(pretrained=True)
