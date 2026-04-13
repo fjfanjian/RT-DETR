@@ -1,7 +1,7 @@
 
 print_freq: 100
 output_dir: './logs'
-checkpoint_freq: 1
+checkpoint_freq: 0  # 禁用中间checkpoint，仅保存best和last
 
 
 sync_bn: True
