@@ -1,0 +1,11 @@
+__include__:
+  - ../../configs/rtdetrv2/rtdetrv2_dinov3b_visdrone.yml
+
+output_dir: ./output/experiments/dinov3_freeze_25pct
+
+DINOv3Backbone:
+  freeze_backbone: True
+
+train_dataloader:
+  dataset:
+    ann_file: experiments/data/visdrone_subsets/train_coco_25pct.json

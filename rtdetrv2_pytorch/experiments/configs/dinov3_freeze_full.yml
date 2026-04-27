@@ -1,0 +1,7 @@
+__include__:
+  - ../../configs/rtdetrv2/rtdetrv2_dinov3b_visdrone.yml
+
+output_dir: ./output/experiments/dinov3_freeze_full
+
+DINOv3Backbone:
+  freeze_backbone: True

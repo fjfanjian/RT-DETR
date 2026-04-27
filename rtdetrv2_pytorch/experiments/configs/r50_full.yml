@@ -1,0 +1,4 @@
+__include__:
+  - ../../configs/rtdetrv2/rtdetrv2_r50vd_visdrone.yml
+
+output_dir: ./output/experiments/r50_full
