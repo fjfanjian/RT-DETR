@@ -1,6 +1,6 @@
 """Copyright(c) 2023 lyuwenyu. All Rights Reserved.
 
-DINOv3 组合骨干网络，将 DINOv3 模型和 FPN 适配器组合在一起
+DINOv3 backbone with the full adapter implementation.
 """
 
 import torch
@@ -14,16 +14,7 @@ from .dinov3_adapter import DINOv3FPNAdapter
 
 @register()
 class DINOv3Backbone(nn.Module):
-    """DINOv3 组合骨干网络
-
-    将 DINOv3 模型和 FPN 适配器组合在一起，输出 RT-DETRv2 所需的多尺度特征:
-    - 输入: [B, 3, H, W]
-    - 输出: 3 层多尺度特征，每层 256 通道
-
-    输出格式符合 HybridEncoder 的输入要求:
-    - 3 个特征图，通道数为 [256, 256, 256]
-    - stride 为 [8, 16, 32]
-    """
+    """DINOv3 backbone with full adapter interaction and 4-scale outputs."""
 
     def __init__(
         self,
@@ -32,6 +23,17 @@ class DINOv3Backbone(nn.Module):
         layers_to_use: int = 4,
         freeze_backbone: bool = True,
         hidden_dim: int = 256,
+        interaction_indexes=None,
+        conv_inplane: int = 64,
+        n_points: int = 4,
+        deform_num_heads: int = 12,
+        drop_path_rate: float = 0.0,
+        with_cffn: bool = True,
+        cffn_ratio: float = 0.25,
+        deform_ratio: float = 1.0,
+        add_vit_feature: bool = True,
+        use_extra_extractor: bool = True,
+        with_cp: bool = False,
     ):
         super().__init__()
 
@@ -43,21 +45,24 @@ class DINOv3Backbone(nn.Module):
             freeze_backbone=freeze_backbone,
         )
 
-        # 获取 DINOv3 的通道数
-        embed_dim = self.dinov3.embed_dim  # 768 for ViT-B
-        in_channels_list = [embed_dim] * layers_to_use
-
-        # FPN 适配器
         self.adapter = DINOv3FPNAdapter(
-            in_channels_list=in_channels_list,
+            backbone=self.dinov3.backbone,
             hidden_dim=hidden_dim,
-            out_channels_list=[hidden_dim, hidden_dim, hidden_dim],
-            out_strides=[8, 16, 32],
+            interaction_indexes=interaction_indexes,
+            conv_inplane=conv_inplane,
+            n_points=n_points,
+            deform_num_heads=deform_num_heads,
+            drop_path_rate=drop_path_rate,
+            with_cffn=with_cffn,
+            cffn_ratio=cffn_ratio,
+            deform_ratio=deform_ratio,
+            add_vit_feature=add_vit_feature,
+            use_extra_extractor=use_extra_extractor,
+            with_cp=with_cp,
         )
 
-        # 输出配置
-        self.strides = [8, 16, 32]
-        self.channels = [hidden_dim, hidden_dim, hidden_dim]
+        self.strides = [4, 8, 16, 32]
+        self.channels = [hidden_dim, hidden_dim, hidden_dim, hidden_dim]
 
     def forward(self, x: torch.Tensor):
         """前向传播
@@ -66,15 +71,9 @@ class DINOv3Backbone(nn.Module):
             x: 输入图像 [B, 3, H, W]
 
         Returns:
-            outputs: 特征列表 List[Tensor], 每层 [B, 256, H/8, H/16, H/32]
+            outputs: 特征列表 List[Tensor], 每层 [B, 256, H/4, H/8, H/16, H/32]
         """
-        # 获取 DINOv3 多层特征
-        feats = self.dinov3(x)
-
-        # 通过 FPN 适配器生成多尺度特征
-        outputs = self.adapter(feats)
-
-        return outputs
+        return self.adapter(x)
 
 
 if __name__ == '__main__':
@@ -93,5 +92,5 @@ if __name__ == '__main__':
         outputs = backbone(data)
 
     for i, output in enumerate(outputs):
-        stride = [8, 16, 32][i]
+        stride = [4, 8, 16, 32][i]
         print(f"Output {i} (stride={stride}): {output.shape}")

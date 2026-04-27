@@ -26,10 +26,10 @@ DINOv3Backbone:
 
 
 HybridEncoder:
-  in_channels: [256, 256, 256]
-  feat_strides: [8, 16, 32]
+  in_channels: [256, 256, 256, 256]
+  feat_strides: [4, 8, 16, 32]
   hidden_dim: 256
-  use_encoder_idx: [2]
+  use_encoder_idx: [3]
   num_encoder_layers: 1
   nhead: 8
   dim_feedforward: 1024
@@ -41,7 +41,11 @@ HybridEncoder:
 
 
 RTDETRTransformerv2:
+  feat_channels: [256, 256, 256, 256]
+  feat_strides: [4, 8, 16, 32]
+  num_levels: 4
   num_layers: 3
+  num_points: [4, 4, 4, 4]
 
 
 epoches: 120
