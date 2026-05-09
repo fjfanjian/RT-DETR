@@ -58,6 +58,12 @@ if grep -q "DINOv3Backbone" "$CONFIG_PATH"; then
     UPDATE_ARGS+=("DINOv3Backbone.pretrained_path=${DINOV3_WEIGHTS}")
 fi
 
+EXTRA_ARGS=()
+if [ -n "${TUNING_CKPT:-}" ]; then
+    echo "TUNING_CKPT: $TUNING_CKPT"
+    EXTRA_ARGS+=(-t "$TUNING_CKPT")
+fi
+
 echo "=========================================="
 echo "RT-DETRv2 experiment launcher"
 echo "=========================================="
@@ -82,4 +88,5 @@ CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES" torchrun --nproc_per_node="$NPROC_P
     --use-amp \
     --output-dir "$OUTPUT_DIR" \
     -u "${UPDATE_ARGS[@]}" \
+    "${EXTRA_ARGS[@]}" \
     "$@" 2>&1 | tee "$LOG_FILE"
