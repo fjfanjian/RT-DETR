@@ -1,0 +1,12 @@
+__include__:
+  - ../../configs/rtdetrv2/rtdetrv2_r50vd_visdrone.yml
+
+output_dir: ./output/experiments/r50_freeze_10pct
+
+PResNet:
+  freeze_at: 4
+  freeze_norm: True
+
+train_dataloader:
+  dataset:
+    ann_file: experiments/data/visdrone_subsets/train_coco_10pct.json
