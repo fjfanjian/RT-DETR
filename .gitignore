@@ -176,6 +176,8 @@ benchmark_results/
 improved_inference_results/
 CLAUDE.md
 inference_results/
+artifacts/
+experiments/
 .claude/
 *_bmad*/
 
