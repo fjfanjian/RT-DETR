@@ -38,3 +38,19 @@ val_dataloader:
   drop_last: False
   collate_fn:
     type: BatchImageCollateFuncion
+
+test_dataloader:
+  type: DataLoader
+  dataset:
+    type: CocoDetection
+    img_folder: /home/fj/datasets/visdrone/VisDrone2019-DET-train/images
+    ann_file: /home/fj/datasets/visdrone/test_coco.json
+    return_masks: False
+    transforms:
+      type: Compose
+      ops: ~
+  shuffle: False
+  num_workers: 4
+  drop_last: False
+  collate_fn:
+    type: BatchImageCollateFuncion
