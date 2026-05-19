@@ -1,0 +1,14 @@
+__include__:
+  - ../../configs/rtdetrv2/rtdetrv2_dinov3b_visdrone.yml
+
+output_dir: ./output/experiments/dinov3_freeze_full_6layers
+
+train_dataloader:
+  total_batch_size: 4
+  num_workers: 8
+
+DINOv3Backbone:
+  freeze_backbone: True
+
+RTDETRTransformerv2:
+  num_layers: 6

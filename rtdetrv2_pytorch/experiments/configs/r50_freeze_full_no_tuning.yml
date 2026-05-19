@@ -1,0 +1,12 @@
+__include__:
+  - ../../configs/rtdetrv2/rtdetrv2_r50vd_visdrone.yml
+
+output_dir: ./output/experiments/r50_freeze_full_no_tuning
+
+train_dataloader:
+  total_batch_size: 8
+  num_workers: 8
+
+PResNet:
+  freeze_at: 4
+  freeze_norm: True

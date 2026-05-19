@@ -1,0 +1,24 @@
+__include__:
+  - ../../configs/rtdetrv2/rtdetrv2_r50vd_visdrone.yml
+
+output_dir: ./output/experiments/r50_freeze_full_4scale
+
+train_dataloader:
+  total_batch_size: 8
+  num_workers: 8
+
+PResNet:
+  return_idx: [0, 1, 2, 3]
+  freeze_at: 4
+  freeze_norm: True
+
+HybridEncoder:
+  in_channels: [256, 512, 1024, 2048]
+  feat_strides: [4, 8, 16, 32]
+
+RTDETRTransformerv2:
+  feat_channels: [256, 256, 256, 256]
+  feat_strides: [4, 8, 16, 32]
+  num_levels: 4
+  num_layers: 3
+  num_points: [4, 4, 4, 4]
