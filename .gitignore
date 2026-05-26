@@ -177,7 +177,13 @@ improved_inference_results/
 CLAUDE.md
 inference_results/
 artifacts/
-experiments/
+# Keep generated experiment artifacts ignored, but allow source-like configs/scripts.
+!rtdetrv2_pytorch/experiments/
+rtdetrv2_pytorch/experiments/*
+!rtdetrv2_pytorch/experiments/configs/
+!rtdetrv2_pytorch/experiments/configs/**
+!rtdetrv2_pytorch/experiments/scripts/
+!rtdetrv2_pytorch/experiments/scripts/**
 .claude/
 *_bmad*/
 

@@ -328,3 +328,49 @@ class HybridEncoder(nn.Module):
             outs.append(out)
 
         return outs
+
+
+@register()
+class PassThroughEncoder(nn.Module):
+    __share__ = ['eval_spatial_size', ]
+
+    def __init__(self,
+                 in_channels=[256, 256, 256, 256],
+                 feat_strides=[4, 8, 16, 32],
+                 eval_spatial_size=None,
+                 strict_shape=True):
+        super().__init__()
+        self.in_channels = list(in_channels)
+        self.feat_strides = list(feat_strides)
+        self.eval_spatial_size = eval_spatial_size
+        self.strict_shape = strict_shape
+        self.out_channels = list(in_channels)
+        self.out_strides = list(feat_strides)
+
+    def forward(self, feats):
+        assert len(feats) == len(self.in_channels), \
+            f'Expected {len(self.in_channels)} features, but got {len(feats)}'
+
+        base_height = None
+        base_width = None
+        base_stride = None
+        outs = []
+        for idx, (feat, expected_channels, stride) in enumerate(zip(feats, self.in_channels, self.feat_strides)):
+            assert feat.ndim == 4, f'Expected 4D feature map, but got {feat.ndim}D at level {idx}'
+            _, channels, height, width = feat.shape
+            assert channels == expected_channels, \
+                f'Expected {expected_channels} channels at level {idx}, but got {channels}'
+
+            if idx == 0:
+                base_height = height
+                base_width = width
+                base_stride = stride
+            elif self.strict_shape:
+                expected_height = base_height * base_stride // stride
+                expected_width = base_width * base_stride // stride
+                assert height == expected_height and width == expected_width, \
+                    f'Expected feature shape {(expected_height, expected_width)} at level {idx}, but got {(height, width)}'
+
+            outs.append(feat)
+
+        return outs

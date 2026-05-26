@@ -1,0 +1,11 @@
+__include__:
+  - ../../configs/rtdetrv2/rtdetrv2_dinov3b_visdrone_encoder_free.yml
+
+output_dir: ./output/experiments/dinov3_freeze_full_encoder_free
+
+DINOv3Backbone:
+  freeze_backbone: True
+
+train_dataloader:
+  total_batch_size: 8
+  num_workers: 8

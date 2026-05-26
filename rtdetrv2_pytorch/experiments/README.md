@@ -12,6 +12,7 @@ experiments/
 │   ├── dinov3_freeze_10pct.yml
 │   ├── dinov3_freeze_25pct.yml
 │   ├── dinov3_full_finetune.yml
+│   ├── dinov3_freeze_full_encoder_free.yml
 │   ├── r50_full.yml
 │   └── r50_25pct.yml
 ├── data/
@@ -23,6 +24,7 @@ experiments/
 │   ├── train_dinov3_freeze_10pct.sh
 │   ├── train_dinov3_freeze_25pct.sh
 │   ├── train_dinov3_full_finetune.sh
+│   ├── train_dinov3_freeze_full_encoder_free.sh
 │   ├── train_r50_full.sh
 │   └── train_r50_25pct.sh
 └── tools/
@@ -34,6 +36,7 @@ experiments/
 | 实验名 | 配置文件 | 启动脚本 | 目的 |
 | --- | --- | --- | --- |
 | dinov3_freeze_full | experiments/configs/dinov3_freeze_full.yml | experiments/scripts/train_dinov3_freeze_full.sh | DINOv3 冻结主干，全量 VisDrone |
+| dinov3_freeze_full_encoder_free | experiments/configs/dinov3_freeze_full_encoder_free.yml | experiments/scripts/train_dinov3_freeze_full_encoder_free.sh | E18a：移除 HybridEncoder 的首轮 encoder-free 对照 |
 | dinov3_freeze_10pct | experiments/configs/dinov3_freeze_10pct.yml | experiments/scripts/train_dinov3_freeze_10pct.sh | 小样本 10%，验证迁移优势 |
 | dinov3_freeze_25pct | experiments/configs/dinov3_freeze_25pct.yml | experiments/scripts/train_dinov3_freeze_25pct.sh | 小样本 25%，验证标注效率 |
 | dinov3_full_finetune | experiments/configs/dinov3_full_finetune.yml | experiments/scripts/train_dinov3_full_finetune.sh | DINOv3 全量微调上限 |
@@ -119,10 +122,11 @@ output/experiments/<experiment_name>/
 
 1. r50_full
 2. dinov3_freeze_full
-3. dinov3_freeze_10pct
-4. dinov3_freeze_25pct
-5. r50_25pct
-6. dinov3_full_finetune
+3. dinov3_freeze_full_encoder_free
+4. dinov3_freeze_10pct
+5. dinov3_freeze_25pct
+6. r50_25pct
+7. dinov3_full_finetune
 
 ## 说明
 

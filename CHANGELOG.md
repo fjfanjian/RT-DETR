@@ -7,3 +7,8 @@
 - Add ResNet50 freeze training configurations and scripts for VisDrone experiments
 - Add VisDrone validation set inference script with GT comparison visualization
 - Add VisDrone test set batch inference script with FPS measurement and multi-experiment summary
+- Add encoder-free DINOv3 VisDrone experiment config and launcher under experiments/
+- Add DINOv3 architecture documentation with tensor-shape walkthrough
+
+### Changed
+- Allow experiments/configs and experiments/scripts to be tracked while keeping generated outputs ignored
