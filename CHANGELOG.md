@@ -12,3 +12,4 @@
 
 ### Changed
 - Allow experiments/configs and experiments/scripts to be tracked while keeping generated outputs ignored
+- Reduce DINOv3 encoder-free VisDrone experiment total_batch_size from 8 to 6

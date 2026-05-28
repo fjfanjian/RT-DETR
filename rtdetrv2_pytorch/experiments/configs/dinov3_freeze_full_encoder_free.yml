@@ -7,5 +7,5 @@ DINOv3Backbone:
   freeze_backbone: True
 
 train_dataloader:
-  total_batch_size: 8
+  total_batch_size: 6
   num_workers: 8
