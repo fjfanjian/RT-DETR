@@ -2,6 +2,7 @@
 """
 
 import copy
+import math
 from collections import OrderedDict
 
 import torch 
@@ -13,7 +14,7 @@ from .utils import get_activation
 from ...core import register
 
 
-__all__ = ['HybridEncoder']
+__all__ = ['HybridEncoder', 'SparseHybridEncoder', 'PassThroughEncoder']
 
 
 
@@ -289,10 +290,11 @@ class HybridEncoder(nn.Module):
 
         return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
 
-    def forward(self, feats):
+    def _project_features(self, feats):
         assert len(feats) == len(self.in_channels)
-        proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
-        
+        return [self.input_proj[i](feat) for i, feat in enumerate(feats)]
+
+    def _encode_projected_features(self, proj_feats):
         # encoder
         if self.num_encoder_layers > 0:
             for i, enc_ind in enumerate(self.use_encoder_idx):
@@ -307,7 +309,9 @@ class HybridEncoder(nn.Module):
 
                 memory :torch.Tensor = self.encoder[i](src_flatten, pos_embed=pos_embed)
                 proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, h, w).contiguous()
+        return proj_feats
 
+    def _fuse_projected_features(self, proj_feats):
         # broadcasting and fusion
         inner_outs = [proj_feats[-1]]
         for idx in range(len(self.in_channels) - 1, 0, -1):
@@ -327,6 +331,270 @@ class HybridEncoder(nn.Module):
             out = self.pan_blocks[idx](torch.concat([downsample_feat, feat_height], dim=1))
             outs.append(out)
 
+        return outs
+
+    def forward(self, feats):
+        proj_feats = self._project_features(feats)
+        proj_feats = self._encode_projected_features(proj_feats)
+        return self._fuse_projected_features(proj_feats)
+
+
+@register()
+class SparseHybridEncoder(HybridEncoder):
+    __share__ = ['eval_spatial_size', ]
+
+    def __init__(self,
+                 in_channels=[256, 256, 256, 256],
+                 feat_strides=[4, 8, 16, 32],
+                 hidden_dim=256,
+                 nhead=8,
+                 dim_feedforward=1024,
+                 dropout=0.0,
+                 enc_act='gelu',
+                 use_encoder_idx=[3],
+                 num_encoder_layers=1,
+                 pe_temperature=10000,
+                 expansion=1.0,
+                 depth_mult=1.0,
+                 act='silu',
+                 eval_spatial_size=None,
+                 version='v2',
+                 saliency_levels=[2, 3],
+                 saliency_weights=[0.7, 0.3],
+                 anchor_level=2,
+                 window_size=8,
+                 window_padding=2,
+                 active_window_ratio=0.45,
+                 min_windows=4,
+                 max_windows=16,
+                 dense_fallback_ratio=0.65,
+                 saliency_eps=1e-6,
+                 saliency_detach=True,
+                 force_dense=False):
+        super().__init__(
+            in_channels=in_channels,
+            feat_strides=feat_strides,
+            hidden_dim=hidden_dim,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            enc_act=enc_act,
+            use_encoder_idx=use_encoder_idx,
+            num_encoder_layers=num_encoder_layers,
+            pe_temperature=pe_temperature,
+            expansion=expansion,
+            depth_mult=depth_mult,
+            act=act,
+            eval_spatial_size=eval_spatial_size,
+            version=version,
+        )
+        self.saliency_levels = list(saliency_levels)
+        self.saliency_weights = list(saliency_weights)
+        self.anchor_level = anchor_level
+        self.window_size = int(window_size)
+        self.window_padding = int(window_padding)
+        self.active_window_ratio = float(active_window_ratio)
+        self.min_windows = int(min_windows)
+        self.max_windows = int(max_windows)
+        self.dense_fallback_ratio = float(dense_fallback_ratio)
+        self.saliency_eps = saliency_eps
+        self.saliency_detach = saliency_detach
+        self.force_dense = force_dense
+        self.last_saliency_map = None
+        self.last_sparse_stats = None
+
+        assert len(self.saliency_levels) > 0, 'saliency_levels must not be empty'
+        assert len(self.saliency_levels) == len(self.saliency_weights), (
+            'saliency_levels and saliency_weights must have the same length'
+        )
+        assert 0 <= self.anchor_level < len(self.in_channels), (
+            f'anchor_level must be in [0, {len(self.in_channels) - 1}]'
+        )
+        assert self.window_size > 0, 'window_size must be positive'
+        assert self.window_padding >= 0, 'window_padding must be non-negative'
+        assert 0.0 < self.active_window_ratio <= 1.0, 'active_window_ratio must be in (0, 1]'
+        assert self.min_windows >= 1, 'min_windows must be positive'
+        assert self.max_windows >= self.min_windows, 'max_windows must be >= min_windows'
+        assert 0.0 <= self.dense_fallback_ratio <= 1.0, 'dense_fallback_ratio must be in [0, 1]'
+
+    def _activation_variance_saliency(self, feat):
+        feat_for_saliency = feat.detach() if self.saliency_detach else feat
+        saliency = feat_for_saliency.float().var(dim=1, unbiased=False, keepdim=True)
+        return saliency.to(dtype=feat.dtype)
+
+    def _normalize_saliency(self, saliency):
+        flat = saliency.flatten(2)
+        min_value = flat.min(dim=-1, keepdim=True).values.unsqueeze(-1)
+        max_value = flat.max(dim=-1, keepdim=True).values.unsqueeze(-1)
+        dynamic_range = max_value - min_value
+        denom = dynamic_range.clamp_min(self.saliency_eps)
+
+        normalized = (saliency - min_value) / denom
+        normalized = torch.where(
+            dynamic_range > self.saliency_eps,
+            normalized,
+            torch.zeros_like(normalized),
+        )
+        return normalized.clamp_(0.0, 1.0)
+
+    def _extract_saliency_map(self, proj_feats):
+        target_size = proj_feats[self.anchor_level].shape[-2:]
+        weighted_maps = []
+
+        for level, weight in zip(self.saliency_levels, self.saliency_weights):
+            assert 0 <= level < len(proj_feats), (
+                f'saliency level {level} is out of range for {len(proj_feats)} feature levels'
+            )
+            saliency = self._activation_variance_saliency(proj_feats[level])
+            saliency = self._normalize_saliency(saliency)
+
+            if saliency.shape[-2:] != target_size:
+                saliency = F.interpolate(
+                    saliency,
+                    size=target_size,
+                    mode='bilinear',
+                    align_corners=False,
+                )
+
+            weighted_maps.append(saliency * float(weight))
+
+        saliency = torch.stack(weighted_maps, dim=0).sum(dim=0)
+        return self._normalize_saliency(saliency)
+
+    def _pad_saliency_for_windows(self, saliency):
+        _, _, height, width = saliency.shape
+        padded_height = int(math.ceil(height / self.window_size) * self.window_size)
+        padded_width = int(math.ceil(width / self.window_size) * self.window_size)
+        if padded_height == height and padded_width == width:
+            return saliency, (height, width)
+
+        pad_h = padded_height - height
+        pad_w = padded_width - width
+        padded = F.pad(saliency, (0, pad_w, 0, pad_h), mode='replicate')
+        return padded, (height, width)
+
+    def _select_active_windows(self, saliency):
+        padded_saliency, original_size = self._pad_saliency_for_windows(saliency)
+        pooled = F.avg_pool2d(padded_saliency, kernel_size=self.window_size, stride=self.window_size)
+        batch_size, _, grid_h, grid_w = pooled.shape
+        num_windows = grid_h * grid_w
+        active_count = int(round(num_windows * self.active_window_ratio))
+        active_count = max(self.min_windows, active_count)
+        active_count = min(self.max_windows, active_count, num_windows)
+
+        flat_scores = pooled.flatten(2)
+        _, topk_idx = torch.topk(flat_scores, k=active_count, dim=-1)
+        window_coords = []
+        active_ratios = []
+
+        for batch_idx in range(batch_size):
+            coords = []
+            for window_idx in topk_idx[batch_idx, 0].tolist():
+                row = window_idx // grid_w
+                col = window_idx % grid_w
+                coords.append((row, col))
+            window_coords.append(coords)
+            active_ratios.append(len(coords) / float(num_windows))
+
+        return window_coords, active_ratios, original_size
+
+    def _anchor_to_level_bounds(self, anchor_start, anchor_end, level_idx, limit):
+        anchor_stride = self.feat_strides[self.anchor_level]
+        level_stride = self.feat_strides[level_idx]
+        pixel_start = anchor_start * anchor_stride
+        pixel_end = anchor_end * anchor_stride
+        level_start = pixel_start // level_stride
+        level_end = int(math.ceil(pixel_end / level_stride))
+        level_start = max(0, min(level_start, limit))
+        level_end = max(level_start + 1, min(level_end, limit))
+        return level_start, level_end
+
+    def _build_window_regions(self, anchor_hw, window_row, window_col, feat_shapes):
+        anchor_h, anchor_w = anchor_hw
+        anchor_y0 = window_row * self.window_size
+        anchor_y1 = min(anchor_y0 + self.window_size, anchor_h)
+        anchor_x0 = window_col * self.window_size
+        anchor_x1 = min(anchor_x0 + self.window_size, anchor_w)
+
+        crop_anchor_y0 = max(0, anchor_y0 - self.window_padding)
+        crop_anchor_y1 = min(anchor_h, anchor_y1 + self.window_padding)
+        crop_anchor_x0 = max(0, anchor_x0 - self.window_padding)
+        crop_anchor_x1 = min(anchor_w, anchor_x1 + self.window_padding)
+
+        crop_slices = []
+        core_slices = []
+        for level_idx, feat_shape in enumerate(feat_shapes):
+            _, _, level_h, level_w = feat_shape
+            crop_y0, crop_y1 = self._anchor_to_level_bounds(crop_anchor_y0, crop_anchor_y1, level_idx, level_h)
+            crop_x0, crop_x1 = self._anchor_to_level_bounds(crop_anchor_x0, crop_anchor_x1, level_idx, level_w)
+            out_y0, out_y1 = self._anchor_to_level_bounds(anchor_y0, anchor_y1, level_idx, level_h)
+            out_x0, out_x1 = self._anchor_to_level_bounds(anchor_x0, anchor_x1, level_idx, level_w)
+
+            crop_slices.append((crop_y0, crop_y1, crop_x0, crop_x1))
+            core_slices.append((out_y0 - crop_y0, out_y1 - crop_y0, out_x0 - crop_x0, out_x1 - crop_x0))
+
+        return crop_slices, core_slices
+
+    def _scatter_sparse_windows(self, encoded_feats, base_outs, saliency):
+        window_coords, active_ratios, anchor_hw = self._select_active_windows(saliency)
+        feat_shapes = [feat.shape for feat in encoded_feats]
+        dense_fallback = []
+        dense_outs = None
+
+        for batch_idx, coords in enumerate(window_coords):
+            active_ratio = active_ratios[batch_idx]
+            fallback_to_dense = self.force_dense or active_ratio >= self.dense_fallback_ratio
+            dense_fallback.append(fallback_to_dense)
+            if fallback_to_dense:
+                if dense_outs is None:
+                    dense_outs = self._fuse_projected_features([feat for feat in encoded_feats])
+                for level_idx, dense_feat in enumerate(dense_outs):
+                    base_outs[level_idx][batch_idx:batch_idx + 1] = dense_feat[batch_idx:batch_idx + 1]
+                continue
+
+            for window_row, window_col in coords:
+                crop_slices, core_slices = self._build_window_regions(anchor_hw, window_row, window_col, feat_shapes)
+                crop_feats = []
+                for level_idx, feat in enumerate(encoded_feats):
+                    y0, y1, x0, x1 = crop_slices[level_idx]
+                    crop_feats.append(feat[batch_idx:batch_idx + 1, :, y0:y1, x0:x1])
+
+                fused_crop_feats = self._fuse_projected_features(crop_feats)
+                for level_idx, fused_crop in enumerate(fused_crop_feats):
+                    out_y0, _, out_x0, _ = crop_slices[level_idx]
+                    core_y0, core_y1, core_x0, core_x1 = core_slices[level_idx]
+                    base_outs[level_idx][
+                        batch_idx:batch_idx + 1,
+                        :,
+                        out_y0 + core_y0:out_y0 + core_y1,
+                        out_x0 + core_x0:out_x0 + core_x1,
+                    ] = fused_crop[:, :, core_y0:core_y1, core_x0:core_x1]
+
+        return base_outs, active_ratios, dense_fallback
+
+    def forward(self, feats):
+        proj_feats = self._project_features(feats)
+        self.last_saliency_map = self._extract_saliency_map(proj_feats)
+        encoded_feats = self._encode_projected_features([feat for feat in proj_feats])
+        if self.force_dense:
+            outs = self._fuse_projected_features(encoded_feats)
+            batch_size = outs[0].shape[0]
+            self.last_sparse_stats = {
+                'active_ratios': [1.0] * batch_size,
+                'dense_fallback': [True] * batch_size,
+            }
+            return outs
+
+        base_outs = [feat.clone() for feat in encoded_feats]
+        outs, active_ratios, dense_fallback = self._scatter_sparse_windows(
+            encoded_feats,
+            base_outs,
+            self.last_saliency_map,
+        )
+        self.last_sparse_stats = {
+            'active_ratios': active_ratios,
+            'dense_fallback': dense_fallback,
+        }
         return outs
 
 

@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Add `SparseHybridEncoder` with saliency-based sparse window selection for efficient feature encoding
+- Add DINOv3 VisDrone sparse encoder training config and launcher script
 - Add TUNING_CKPT environment variable support to experiment launcher
 - Add ResNet50 freeze training configurations and scripts for VisDrone experiments
 - Add VisDrone validation set inference script with GT comparison visualization

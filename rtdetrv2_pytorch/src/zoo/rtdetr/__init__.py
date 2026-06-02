@@ -5,6 +5,7 @@
 from .rtdetr import RTDETR
 from .matcher import HungarianMatcher
 from .hybrid_encoder import HybridEncoder
+from .hybrid_encoder import SparseHybridEncoder
 from .hybrid_encoder import PassThroughEncoder
 from .rtdetr_decoder import RTDETRTransformer
 from .rtdetr_criterion import RTDETRCriterion
