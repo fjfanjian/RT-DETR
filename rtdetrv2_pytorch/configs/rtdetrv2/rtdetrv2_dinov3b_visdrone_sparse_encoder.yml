@@ -1,0 +1,84 @@
+__include__: [
+  '../dataset/visdrone.yml',
+  '../runtime.yml',
+  './include/dataloader.yml',
+  './include/optimizer.yml',
+  './include/rtdetrv2_r50vd.yml',
+]
+
+
+output_dir: ./output/rtdetrv2_dinov3b_visdrone_sparse_encoder
+
+
+RTDETR:
+  backbone: DINOv3Backbone
+  encoder: SparseHybridEncoder
+  decoder: RTDETRTransformerv2
+
+
+DINOv3Backbone:
+  model_name: dinov3_vitb16
+  pretrained_path: /home/fj/dinov3/weights/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth
+  layers_to_use: 4
+  freeze_backbone: True
+  hidden_dim: 256
+
+
+SparseHybridEncoder:
+  in_channels: [256, 256, 256, 256]
+  feat_strides: [4, 8, 16, 32]
+  hidden_dim: 256
+  use_encoder_idx: [3]
+  num_encoder_layers: 1
+  nhead: 8
+  dim_feedforward: 1024
+  dropout: 0.
+  enc_act: 'gelu'
+  expansion: 1.0
+  depth_mult: 1
+  act: 'silu'
+  saliency_levels: [2, 3]
+  saliency_weights: [0.7, 0.3]
+  anchor_level: 2
+  window_size: 8
+  window_padding: 2
+  active_window_ratio: 0.45
+  min_windows: 4
+  max_windows: 16
+  dense_fallback_ratio: 0.65
+  saliency_detach: True
+  force_dense: False
+
+
+RTDETRTransformerv2:
+  feat_channels: [256, 256, 256, 256]
+  feat_strides: [4, 8, 16, 32]
+  num_levels: 4
+  num_layers: 3
+  num_points: [4, 4, 4, 4]
+
+
+epoches: 120
+
+optimizer:
+  type: AdamW
+  params:
+    -
+      params: '^(?=.*backbone)(?!.*norm).*$'
+      lr: 0.00001
+    -
+      params: '^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn)).*$'
+      weight_decay: 0.
+
+  lr: 0.0001
+  betas: [0.9, 0.999]
+  weight_decay: 0.0001
+
+
+train_dataloader:
+  dataset:
+    transforms:
+      policy:
+        epoch: 117
+  collate_fn:
+    scales: ~
